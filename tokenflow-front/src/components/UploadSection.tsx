@@ -1,33 +1,36 @@
-import { Card, Button, Divider } from '@nextui-org/react'
-import { useState } from 'react'
+import { Card } from '@nextui-org/react'
 import { FileUpload } from './FileUpload'
-import { FileList } from './FileList'
-import { IconChevronDown, IconChevronUp, IconUpload } from '@tabler/icons-react'
+import { ImportedFiles } from './ImportedFiles'
+import { useStore } from '@/store/useStore'
 
-export const UploadSection = () => {
-  const [isExpanded, setIsExpanded] = useState(false)
+interface UploadSectionProps {
+  onClose?: () => void;
+}
+
+export const UploadSection = ({ onClose }: UploadSectionProps) => {
+  const { files } = useStore()
 
   return (
-    <Card className="mb-4">
-      <Button
-        className="w-full flex justify-between items-center px-4 py-3"
-        variant="light"
-        onClick={() => setIsExpanded(!isExpanded)}
-      >
-        <div className="flex items-center gap-2">
-          <IconUpload size={18} />
-          <span className="font-medium">Upload de Arquivos</span>
-        </div>
-        {isExpanded ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />}
-      </Button>
+    <div className="flex gap-4">
+      {/* Área de Upload */}
+      <Card className="flex-[3] p-4">
+        <FileUpload onSuccess={onClose} />
+      </Card>
 
-      {isExpanded && (
-        <div className="p-4">
-          <FileUpload />
-          <Divider className="my-4" />
-          <FileList />
-        </div>
+      {/* Lista de Arquivos */}
+      {files.length > 0 && (
+        <Card className="flex-[2]">
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-semibold">Arquivos Importados</h3>
+              <span className="text-sm text-default-500">
+                {files.length} arquivo{files.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <ImportedFiles />
+          </div>
+        </Card>
       )}
-    </Card>
+    </div>
   )
 } 

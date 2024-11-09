@@ -1,14 +1,16 @@
-import { Card, Chip } from '@nextui-org/react'
+import { Card, Chip, Button } from '@nextui-org/react'
 import { useStore } from '@/store/useStore'
 import { filterConversations } from '@/utils/filterConversations'
+import { IconStar, IconStarFilled } from '@tabler/icons-react'
 
 export const ConversationSidebar = () => {
-  const { conversations, filters, setSelectedConversation, selectedConversationId } = useStore()
+  const { conversations, filters, setSelectedConversation, selectedConversationId, favorites, toggleFavorite } = useStore()
   const filteredConversations = filterConversations(conversations, filters)
 
   return (
-    <Card className="h-[calc(100vh-400px)] overflow-y-auto">
-      <div className="p-2 space-y-1">
+    <Card className="h-[calc(100vh-200px)]">
+      {/* Lista de Conversas */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {filteredConversations.map(conversation => (
           <div
             key={conversation.id}
@@ -21,23 +23,34 @@ export const ConversationSidebar = () => {
               border
             `}
           >
-            <h3 className="font-medium text-lg mb-1.5 line-clamp-2">
-              {conversation.title}
-            </h3>
-
-            <div className="flex items-center gap-2">
-              <Chip
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-medium text-lg truncate flex-1">
+                {conversation.title}
+              </h3>
+              <Button
+                isIconOnly
+                variant="light"
                 size="sm"
-                variant="flat"
-                color={conversation.source === 'gpt' ? 'primary' : 'warning'}
+                className="min-w-unit-8 flex-none"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleFavorite(conversation.id)
+                }}
               >
+                {favorites.has(conversation.id) 
+                  ? <IconStarFilled size={16} className="text-warning" />
+                  : <IconStar size={16} />
+                }
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 mt-2">
+              <Chip size="sm" variant="flat" color="primary">
                 {conversation.source}
               </Chip>
-
               <Chip size="sm" variant="flat">
                 {conversation.messages.length} msgs
               </Chip>
-
               <span className="text-xs text-default-500 ml-auto">
                 {new Date(conversation.created_at).toLocaleDateString('pt-BR')}
               </span>

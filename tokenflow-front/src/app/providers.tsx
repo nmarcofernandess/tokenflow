@@ -2,24 +2,18 @@
 
 import { NextUIProvider } from '@nextui-org/react'
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 
-export function Providers({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark')
+export function Providers({ children }: { children: ReactNode }) {
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    // Verifica a preferência do sistema
-    const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    setTheme(isDark ? 'dark' : 'light')
-    
-    // Aplica a classe ao html
-    document.documentElement.classList.toggle('dark', isDark)
+    setMounted(true)
+    const isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches
+    document.documentElement.classList.toggle('dark', isDarkMode)
   }, [])
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light'
-    setTheme(newTheme)
-    document.documentElement.classList.toggle('dark')
-  }
+  if (!mounted) return null
 
   return (
     <NextUIProvider>

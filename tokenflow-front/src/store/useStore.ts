@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { UnifiedConversation } from '@/types/chat'
 import { Filters, DateFilter, TagFilter } from '@/types/filters'
 
+interface FileConversations {
+  [fileName: string]: {
+    conversations: UnifiedConversation[];
+    ids: string[];
+  }
+}
+
 interface FileState {
   files: File[];
   conversations: UnifiedConversation[];
@@ -9,7 +16,7 @@ interface FileState {
   isLoading: boolean;
   loadingMessage: string;
   selectedConversationId: string | null;
-  fileConversations: Map<string, string[]>; // Mapeia arquivo -> IDs de conversas
+  fileConversations: FileConversations;
   addFiles: (newFiles: File[]) => void;
   removeFile: (index: number) => void;
   setConversations: (conversations: UnifiedConversation[], fileName: string) => void;
@@ -20,12 +27,17 @@ interface FileState {
   addTagFilter: (filter: TagFilter) => void;
   removeTagFilter: (index: number) => void;
   setSelectedConversation: (id: string) => void;
+  favorites: Set<string>;
+  searchInChat: string;
+  toggleFavorite: (id: string) => void;
+  toggleAllFavorites: (ids: string[]) => void;
+  setSearchInChat: (search: string) => void;
 }
 
 export const useStore = create<FileState>((set) => ({
   files: [],
   conversations: [],
-  fileConversations: new Map(),
+  fileConversations: {},
   isLoading: false,
   loadingMessage: '',
   selectedConversationId: null,
@@ -36,45 +48,58 @@ export const useStore = create<FileState>((set) => ({
     },
     tagFilters: []
   },
+  favorites: new Set(),
+  searchInChat: '',
   addFiles: (newFiles) => set((state) => ({ 
     files: [...state.files, ...newFiles] 
   })),
-  removeFile: (index) => set((state) => ({
-    files: state.files.filter((_, i) => i !== index)
-  })),
+  removeFile: (index) => set((state) => {
+    const fileToRemove = state.files[index]
+    if (!fileToRemove) return state
+
+    const newFiles = state.files.filter((_, i) => i !== index)
+    const { [fileToRemove.name]: removed, ...restFileConversations } = state.fileConversations
+
+    // Remove as conversas associadas ao arquivo
+    const newConversations = state.conversations.filter(conv => 
+      !state.fileConversations[fileToRemove.name]?.ids.includes(conv.id)
+    )
+
+    return {
+      files: newFiles,
+      conversations: newConversations,
+      fileConversations: restFileConversations,
+      selectedConversationId: state.selectedConversationId && 
+        state.fileConversations[fileToRemove.name]?.ids.includes(state.selectedConversationId)
+        ? null 
+        : state.selectedConversationId
+    }
+  }),
   setConversations: (conversations, fileName) => set((state) => {
-    // Armazena os IDs das novas conversas associados ao arquivo
-    const conversationIds = conversations.map(conv => conv.id)
-    const newFileConversations = new Map(state.fileConversations)
-    newFileConversations.set(fileName, conversationIds)
+    const fileData = {
+      conversations,
+      ids: conversations.map(conv => conv.id)
+    }
 
     return {
       conversations: [...state.conversations, ...conversations],
-      fileConversations: newFileConversations
+      fileConversations: {
+        ...state.fileConversations,
+        [fileName]: fileData
+      }
     }
   }),
   removeConversationsFromFile: (fileName) => set((state) => {
-    // Obtém os IDs das conversas associadas ao arquivo
-    const conversationIds = state.fileConversations.get(fileName) || []
-    
-    // Remove as conversas do arquivo
-    const newConversations = state.conversations.filter(
-      conv => !conversationIds.includes(conv.id)
-    )
-
-    // Remove o mapeamento do arquivo
-    const newFileConversations = new Map(state.fileConversations)
-    newFileConversations.delete(fileName)
-
-    // Limpa a seleção se a conversa selecionada foi removida
-    const newSelectedId = conversationIds.includes(state.selectedConversationId || '')
-      ? null
-      : state.selectedConversationId
+    const { [fileName]: removed, ...restFileConversations } = state.fileConversations
+    const fileIds = removed?.ids || []
 
     return {
-      conversations: newConversations,
-      fileConversations: newFileConversations,
-      selectedConversationId: newSelectedId
+      conversations: state.conversations.filter(conv => !fileIds.includes(conv.id)),
+      fileConversations: restFileConversations,
+      selectedConversationId: state.selectedConversationId && 
+        fileIds.includes(state.selectedConversationId)
+        ? null 
+        : state.selectedConversationId
     }
   }),
   setLoading: (loading) => set({ isLoading: loading }),
@@ -94,5 +119,29 @@ export const useStore = create<FileState>((set) => ({
       tagFilters: state.filters.tagFilters.filter((_, i) => i !== index)
     }
   })),
-  setSelectedConversation: (id) => set({ selectedConversationId: id })
+  setSelectedConversation: (id) => set({ selectedConversationId: id }),
+  toggleFavorite: (id) => set((state) => {
+    const newFavorites = new Set(state.favorites)
+    if (newFavorites.has(id)) {
+      newFavorites.delete(id)
+    } else {
+      newFavorites.add(id)
+    }
+    return { favorites: newFavorites }
+  }),
+  toggleAllFavorites: (ids) => set((state) => {
+    const allAreFavorited = ids.every(id => state.favorites.has(id))
+    const newFavorites = new Set(state.favorites)
+    
+    if (allAreFavorited) {
+      // Remove todos
+      ids.forEach(id => newFavorites.delete(id))
+    } else {
+      // Adiciona todos
+      ids.forEach(id => newFavorites.add(id))
+    }
+    
+    return { favorites: newFavorites }
+  }),
+  setSearchInChat: (search) => set({ searchInChat: search })
 })) 

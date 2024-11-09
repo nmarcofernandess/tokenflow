@@ -1,56 +1,75 @@
-import { Card, Input, Button, Chip } from '@nextui-org/react'
-import { useStore } from '@/store/useStore'
+import { Input, Button, Chip } from '@nextui-org/react'
+import { IconTag, IconPlus } from '@tabler/icons-react'
 import { useState } from 'react'
-import { IconTag } from '@tabler/icons-react'
+import { useStore } from '@/store/useStore'
 
 interface TagsFilterProps {
-  operator: 'AND' | 'OR';
+  operator: 'AND' | 'OR'
+  placeholder?: string
+  autoCreate?: boolean
 }
 
-export const TagsFilter = ({ operator }: TagsFilterProps) => {
+export const TagsFilter = ({ operator, placeholder = "Adicionar tag..." }: TagsFilterProps) => {
   const { filters, addTagFilter, removeTagFilter } = useStore()
-  const [newTag, setNewTag] = useState('')
+  const [input, setInput] = useState('')
+
+  const currentTags = filters.tagFilters.filter(filter => filter.operator === operator)
 
   const handleAddTag = () => {
-    if (newTag.trim()) {
+    if (input.trim()) {
       addTagFilter({
-        tag: newTag.trim(),
-        operator: operator // Usando o operator recebido via props
+        tag: input.trim(),
+        operator
       })
-      setNewTag('')
+      setInput('')
+    }
+  }
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleAddTag()
     }
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {/* Input com botão de adicionar */}
       <div className="flex gap-2">
         <Input
-          value={newTag}
-          onChange={(e) => setNewTag(e.target.value)}
-          placeholder="Adicionar tag..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyPress={handleKeyPress}
+          placeholder={placeholder}
+          startContent={<IconTag size={16} className="text-default-400" />}
           size="sm"
-          startContent={<IconTag size={16} />}
-          onKeyPress={(e) => e.key === 'Enter' && handleAddTag()}
+          className="flex-1"
         />
         <Button
-          color="primary"
+          isIconOnly
           size="sm"
+          color="primary"
           onClick={handleAddTag}
-          isDisabled={!newTag.trim()}
+          isDisabled={!input.trim()}
         >
-          Adicionar
+          <IconPlus size={16} />
         </Button>
       </div>
 
-      {filters.tagFilters.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {filters.tagFilters.map((filter, index) => (
+      {/* Área de tags */}
+      {currentTags.length > 0 && (
+        <div className="flex flex-wrap gap-2 p-2 min-h-12 rounded-lg bg-default-100">
+          {currentTags.map((filter, index) => (
             <Chip
-              key={index}
+              key={`${filter.tag}-${index}`}
               onClose={() => removeTagFilter(index)}
               variant="flat"
-              color="secondary"
+              color="primary"
               size="sm"
+              className="transition-all hover:scale-105"
+              classNames={{
+                base: "cursor-pointer",
+                content: "text-sm"
+              }}
             >
               {filter.tag}
             </Chip>
