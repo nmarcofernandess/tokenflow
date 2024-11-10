@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useState, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Card, Chip } from '@nextui-org/react'
+import { Card, Chip, Button } from '@nextui-org/react'
 import { IconBrain, IconRobot } from '@tabler/icons-react'
 import { useStore } from '@/components/store/useStore'
 import { detectAndConvertConversation } from '@/components/utils/conversationConverter'
@@ -42,9 +42,9 @@ const StatsCard = () => {
       
       {/* Stats por arquivo */}
       <div className="space-y-4">
-        {Object.entries(fileConversations).map(([fileName, data]) => (
-          <div key={fileName} className="border-b pb-2">
-            <h4 className="font-medium">{fileName}</h4>
+        {Object.entries(fileConversations).map(([fileId, data]) => (
+          <div key={fileId} className="border-b pb-2">
+            <h4 className="font-medium">{data.fileName}</h4>
             <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
               <div>IA: {data.metadata.source.toUpperCase()}</div>
               <div>Total de Chats: {data.metadata.totalChats}</div>
@@ -65,6 +65,54 @@ const StatsCard = () => {
           <div>Data mais recente: {formatDate(globalStats.dateRange.max)}</div>
         </div>
       </div>
+    </Card>
+  );
+};
+
+// Novo componente para debug
+const DebugCard = () => {
+  const { fileConversations } = useStore();
+
+  // Extrai apenas as metadatas dos arquivos
+  const metadatas = Object.entries(fileConversations).map(([fileId, data]) => ({
+    fileId,
+    fileName: data.fileName,
+    metadata: data.metadata
+  }));
+
+  return (
+    <Card className="p-4 mt-4">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Debug - Metadatas</h3>
+      </div>
+
+      <div className="space-y-4">
+        {metadatas.map(({ fileId, fileName, metadata }, index) => (
+          <div 
+            key={fileId} 
+            className="p-3 rounded bg-default-50"
+          >
+            <div className="font-medium text-sm mb-2">📄 {fileName}</div>
+            <pre className="text-xs whitespace-pre-wrap">
+              {JSON.stringify({
+                fileId,
+                source: metadata.source,
+                totalChats: metadata.totalChats,
+                dateRange: {
+                  firstDate: new Date(metadata.dateRange.firstDate).toLocaleDateString('pt-BR'),
+                  lastDate: new Date(metadata.dateRange.lastDate).toLocaleDateString('pt-BR')
+                }
+              }, null, 2)}
+            </pre>
+          </div>
+        ))}
+      </div>
+
+      {metadatas.length === 0 && (
+        <div className="text-center text-default-500 py-4">
+          Nenhum arquivo processado ainda
+        </div>
+      )}
     </Card>
   );
 };
@@ -115,18 +163,21 @@ export const FileManagement = () => {
       setLoading(true);
       setLoadingMessage(`Processando arquivo ${file.name}...`);
 
+      console.log('Processando arquivo:', file.name);
+
       const content = await processFileInChunks(file);
       const jsonData = JSON.parse(content);
 
-      const result = detectAndConvertConversation(jsonData, file.name);
+      const result = detectAndConvertConversation(jsonData, file);
       
-      setConversations(result, file.name);
-
-      console.log('Debug - Arquivo processado:', {
+      console.log('Resultado da conversão:', {
         fileName: file.name,
-        conversationsCount: result.conversations.length,
-        source: result.metadata.source
+        result: result
       });
+
+      setConversations(result);
+
+      console.log('Estado atual do fileConversations:', fileConversations);
 
     } catch (error) {
       console.error('Erro ao processar arquivo:', error);
@@ -197,11 +248,17 @@ export const FileManagement = () => {
           
           <div className="space-y-2">
             {files.map((file, index) => {
-              // Encontra os dados do arquivo no fileConversations
-              const fileData = Object.entries(fileConversations).find(([key, data]) => 
-                // Compara o tamanho do arquivo também para garantir que é o mesmo
-                key.includes(file.name) && data.metadata.totalChats > 0
-              );
+              const fileId = `${file.name}_${file.size}_${file.lastModified}`;
+              const fileData = fileConversations[fileId];
+              const { source, totalChats } = fileData?.metadata || {};
+              
+              console.log('Debug - Renderizando arquivo:', {
+                fileName: file.name,
+                fileId,
+                source,
+                totalChats,
+                allFiles: Object.keys(fileConversations)
+              });
               
               return (
                 <div key={index} className="p-4 rounded-xl bg-default-100">
@@ -220,19 +277,35 @@ export const FileManagement = () => {
                     </button>
                   </div>
                   <div className="flex items-center gap-2 mt-2">
-                    {fileData && (
+                    {fileData?.metadata ? (
                       <>
-                        <Chip
-                          size="sm"
-                          variant="flat"
-                          color={fileData[1].metadata.source === 'gpt' ? 'primary' : 'warning'}
-                        >
-                          {fileData[1].metadata.source.toUpperCase()}
-                        </Chip>
+                        {source === 'claude' ? (
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color="warning"
+                            startContent={<IconBrain size={16} />}
+                          >
+                            CLAUDE
+                          </Chip>
+                        ) : (
+                          <Chip
+                            size="sm"
+                            variant="flat"
+                            color="primary"
+                            startContent={<IconRobot size={16} />}
+                          >
+                            GPT
+                          </Chip>
+                        )}
                         <Chip size="sm" variant="flat">
-                          {fileData[1].metadata.totalChats} conversas
+                          {totalChats} conversas
                         </Chip>
                       </>
+                    ) : (
+                      <span className="text-xs text-default-500">
+                        Processando arquivo...
+                      </span>
                     )}
                   </div>
                 </div>
@@ -244,6 +317,9 @@ export const FileManagement = () => {
 
       {/* Novo Card de Stats */}
       {files.length > 0 && <StatsCard />}
+
+      {/* Área de Debug */}
+      {process.env.NODE_ENV === 'development' && <DebugCard />}
     </div>
   )
 } 

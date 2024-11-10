@@ -26,7 +26,8 @@ interface FileState {
   loadingMessage: string;
   selectedConversationId: string | null;
   fileConversations: {
-    [fileName: string]: {
+    [fileId: string]: {
+      fileName: string;
       conversations: UnifiedConversation[];
       metadata: FileMetadata;
       ids: string[];
@@ -34,11 +35,8 @@ interface FileState {
   };
   addFiles: (newFiles: File[]) => void;
   removeFile: (index: number) => void;
-  setConversations: (
-    result: ConversionResult,
-    fileName?: string
-  ) => void;
-  removeConversationsFromFile: (fileName: string) => void;
+  setConversations: (result: ConversionResult) => void;
+  removeConversationsFromFile: (fileId: string) => void;
   setLoading: (loading: boolean) => void;
   setLoadingMessage: (message: string) => void;
   setDateFilter: (filter: DateFilter) => void;
@@ -51,9 +49,9 @@ interface FileState {
   toggleAllFavorites: (ids: string[]) => void;
   setSearchInChat: (search: string) => void;
   fileStats: {
-    [fileName: string]: FileStats;
+    [fileId: string]: FileStats;
   };
-  updateFileStats: (fileName: string, stats: FileStats) => void;
+  updateFileStats: (fileId: string, stats: FileStats) => void;
   getGlobalDateRange: () => { min: Date; max: Date };
   getFilteredConversations: () => UnifiedConversation[];
   getGlobalStats: () => {
@@ -61,6 +59,12 @@ interface FileState {
     sources: Set<'gpt' | 'claude'>;
     dateRange: { min: Date; max: Date };
   };
+  fileNameMapping: { [originalName: string]: string };
+  getFileData: (fileId: string) => {
+    conversations: UnifiedConversation[];
+    metadata: FileMetadata;
+    ids: string[];
+  } | undefined;
 }
 
 export const useStore = create<FileState>((set, get) => ({
@@ -80,27 +84,28 @@ export const useStore = create<FileState>((set, get) => ({
   favorites: new Set(),
   searchInChat: '',
   fileStats: {},
-  addFiles: (newFiles) => set((state) => ({ 
-    files: [...state.files, ...newFiles] 
-  })),
+  fileNameMapping: {},
+  addFiles: (newFiles) => set((state) => {
+    return { 
+      files: [...state.files, ...newFiles]
+    };
+  }),
   removeFile: (index) => set((state) => {
-    const fileToRemove = state.files[index]
-    if (!fileToRemove) return state
+    const fileToRemove = state.files[index];
+    if (!fileToRemove) return state;
 
-    const newFiles = state.files.filter((_, i) => i !== index)
-    const { [fileToRemove.name]: removedConvs, ...restFileConversations } = state.fileConversations
-    const { [fileToRemove.name]: removedStats, ...restFileStats } = state.fileStats
+    const fileId = Object.keys(state.fileConversations).find(
+      id => state.fileConversations[id].fileName === fileToRemove.name
+    );
 
-    const idsToRemove = new Set(removedConvs?.ids || [])
-    const newConversations = state.conversations.filter(conv => !idsToRemove.has(conv.id))
+    if (!fileId) return state;
 
-    console.log('Debug - Removendo arquivo:', {
-      removedFile: fileToRemove.name,
-      remainingFiles: newFiles.length,
-      remainingConversations: newConversations.length,
-      remainingFileConvs: Object.keys(restFileConversations).length,
-      remainingStats: Object.keys(restFileStats).length
-    })
+    const newFiles = state.files.filter((_, i) => i !== index);
+    const { [fileId]: removedConvs, ...restFileConversations } = state.fileConversations;
+    const { [fileId]: removedStats, ...restFileStats } = state.fileStats;
+
+    const idsToRemove = new Set(removedConvs?.ids || []);
+    const newConversations = state.conversations.filter(conv => !idsToRemove.has(conv.id));
 
     return {
       files: newFiles,
@@ -111,51 +116,40 @@ export const useStore = create<FileState>((set, get) => ({
         idsToRemove.has(state.selectedConversationId)
         ? null 
         : state.selectedConversationId
-    }
+    };
   }),
-  setConversations: (result: ConversionResult, fileName?: string) => set(state => {
-    if (!fileName) return state;
+  setConversations: (result) => set(state => {
+    const { fileId, conversations, metadata } = result;
 
-    const { conversations, metadata } = result;
+    const updatedFileConversations = {
+      ...state.fileConversations,
+      [fileId]: {
+        fileName: state.files.find(f => 
+          `${f.name}_${f.size}_${f.lastModified}` === fileId
+        )?.name || 'Unknown',
+        conversations: [...conversations],
+        metadata,
+        ids: conversations.map(c => c.id)
+      }
+    };
 
-    let uniqueFileName = fileName;
-    let counter = 1;
-    while (state.fileConversations[uniqueFileName]) {
-      uniqueFileName = `${fileName.replace('.json', '')}_${counter}.json`;
-      counter++;
-    }
-
-    console.log('Debug - setConversations:', {
-      fileName: uniqueFileName,
-      existingFiles: Object.keys(state.fileConversations),
-      newConversations: conversations.length,
-      metadata
-    });
+    const allConversations = Object.values(updatedFileConversations)
+      .flatMap(fileData => fileData.conversations);
 
     return {
-      conversations: [
-        ...state.conversations,
-        ...conversations
-      ],
-      fileConversations: {
-        ...state.fileConversations,
-        [uniqueFileName]: {
-          conversations,
-          metadata,
-          ids: conversations.map(c => c.id)
-        }
-      },
+      conversations: allConversations,
+      fileConversations: updatedFileConversations,
       fileStats: {
         ...state.fileStats,
-        [uniqueFileName]: {
+        [fileId]: {
           source: metadata.source,
           conversationCount: metadata.totalChats
         }
       }
     };
   }),
-  removeConversationsFromFile: (fileName) => set((state) => {
-    const { [fileName]: removed, ...restFileConversations } = state.fileConversations
+  removeConversationsFromFile: (fileId) => set((state) => {
+    const { [fileId]: removed, ...restFileConversations } = state.fileConversations
     const fileIds = removed?.conversations.map(c => c.id) || []
 
     return {
@@ -207,10 +201,10 @@ export const useStore = create<FileState>((set, get) => ({
     return { favorites: newFavorites }
   }),
   setSearchInChat: (search) => set({ searchInChat: search }),
-  updateFileStats: (fileName, stats) => set(state => ({
+  updateFileStats: (fileId, stats) => set(state => ({
     fileStats: {
       ...state.fileStats,
-      [fileName]: stats
+      [fileId]: stats
     }
   })),
   getGlobalDateRange: () => {
@@ -262,5 +256,14 @@ export const useStore = create<FileState>((set, get) => ({
       ),
       dateRange: get().getGlobalDateRange()
     };
+  },
+  getFileData: (fileId: string) => {
+    const state = get();
+    console.log('Debug - getFileData:', {
+      requestedFile: fileId,
+      availableFiles: Object.keys(state.fileConversations),
+      fileData: state.fileConversations[fileId]
+    });
+    return state.fileConversations[fileId];
   }
 })) 

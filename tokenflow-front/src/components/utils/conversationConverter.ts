@@ -11,6 +11,7 @@ import {
 
 // Adicionar export na interface
 export interface ConversionResult {
+  fileId: string;
   conversations: UnifiedConversation[];
   metadata: {
     source: 'gpt' | 'claude';
@@ -199,12 +200,15 @@ export const convertGPTConversation = (
 // Função principal de detecção e conversão
 export const detectAndConvertConversation = (
   jsonData: any,
-  fileName: string
+  file: File
 ): ConversionResult => {
   try {
     let conversations: UnifiedConversation[] = [];
     let source: 'gpt' | 'claude' = 'gpt';
     let dates: Date[] = [];
+
+    // Gera um ID único e imutável baseado no conteúdo do arquivo
+    const fileId = `${file.name}_${file.size}_${file.lastModified}`;
 
     // Processa array ou objeto único
     if (Array.isArray(jsonData)) {
@@ -238,6 +242,7 @@ export const detectAndConvertConversation = (
     dates.sort((a, b) => a.getTime() - b.getTime());
 
     const result = {
+      fileId,
       conversations,
       metadata: {
         source,
@@ -250,7 +255,8 @@ export const detectAndConvertConversation = (
     };
 
     console.log('Debug - Conversão concluída:', {
-      fileName,
+      fileId,
+      fileName: file.name,
       totalChats: result.metadata.totalChats,
       source: result.metadata.source,
       dateRange: result.metadata.dateRange
