@@ -1,7 +1,7 @@
 import { Input, Button, Chip } from '@nextui-org/react'
 import { IconTag, IconPlus } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useStore } from '@/store/useStore'
+import { useStore } from '@/components/store/useStore'
 
 interface TagsFilterProps {
   operator: 'AND' | 'OR'

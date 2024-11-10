@@ -1,15 +1,16 @@
+'use client'
+
 import { Card, Chip, Button } from '@nextui-org/react'
-import { useStore } from '@/store/useStore'
-import { filterConversations } from '@/utils/filterConversations'
+import { useStore } from '@/components/store/useStore'
+import { filterConversations } from '@/components/utils/filterConversations'
 import { IconStar, IconStarFilled } from '@tabler/icons-react'
 
-export const ConversationSidebar = () => {
+export const Sidebar = () => {
   const { conversations, filters, setSelectedConversation, selectedConversationId, favorites, toggleFavorite } = useStore()
   const filteredConversations = filterConversations(conversations, filters)
 
   return (
     <Card className="h-[calc(100vh-200px)]">
-      {/* Lista de Conversas */}
       <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {filteredConversations.map(conversation => (
           <div

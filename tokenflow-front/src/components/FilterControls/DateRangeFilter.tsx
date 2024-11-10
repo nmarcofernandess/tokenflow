@@ -1,5 +1,5 @@
 import { Slider } from "@nextui-org/react"
-import { useStore } from "@/store/useStore"
+import { useStore } from "@/components/store/useStore"
 import { useState, useEffect } from "react"
 
 export const DateRangeFilter = () => {

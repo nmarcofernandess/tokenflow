@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { UnifiedConversation } from '@/types/chat'
-import { Filters, DateFilter, TagFilter } from '@/types/filters'
+import { UnifiedConversation } from '@/components/types/chat'
+import { Filters, DateFilter, TagFilter } from '@/components/types/filters'
 
 interface FileConversations {
   [fileName: string]: {

@@ -1,8 +1,8 @@
 import { Input, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, Card } from '@nextui-org/react'
 import { IconSearch, IconSortAscending, IconSortDescending, IconCalendar, IconMessages, IconStar, IconStarFilled, IconChevronDown, IconTags } from '@tabler/icons-react'
 import { useState } from 'react'
-import { useStore } from '@/store/useStore'
-import { filterConversations } from '@/utils/filterConversations'
+import { useStore } from '@/components/store/useStore'
+import { filterConversations } from '@/components/utils/filterConversations'
 import { TagsFilter } from './TagsFilter'
 import { DateRangeFilter } from './DateRangeFilter'
 

@@ -1,5 +1,5 @@
-import { UnifiedConversation } from '@/types/chat'
-import { Filters } from '@/types/filters'
+import { UnifiedConversation } from '@/components/types/chat'
+import { Filters } from '@/components/types/filters'
 
 export const filterConversations = (
   conversations: UnifiedConversation[],

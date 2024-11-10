@@ -4,7 +4,7 @@ import {
   UnifiedConversation,
   UnifiedMessage,
   GPTMessage 
-} from '@/types/chat'
+} from '@/components/types/chat'
 
 // Função de validação para mensagens unificadas
 const validateMessage = (message: UnifiedMessage): boolean => {
