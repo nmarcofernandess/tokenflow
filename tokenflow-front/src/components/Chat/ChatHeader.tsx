@@ -1,8 +1,9 @@
 'use client'
 
-import { Input } from '@nextui-org/react'
+import { Input, Chip } from '@nextui-org/react'
 import { IconSearch } from '@tabler/icons-react'
 import { useStore } from '@/components/store/useStore'
+import { estimateTokens, formatTokenCount } from '@/utils/tokenCounter';
 
 export const ChatHeader = () => {
   const { selectedConversationId, conversations, searchInChat, setSearchInChat } = useStore()
@@ -13,6 +14,8 @@ export const ChatHeader = () => {
 
   if (!selectedConversation) return null
 
+  const totalTokens = selectedConversation.messages.reduce((acc, msg) => acc + estimateTokens(msg.text), 0);
+
   return (
     <div className="flex justify-between items-center p-4 border-b">
       <div className="flex items-center gap-4 flex-1">
@@ -22,6 +25,9 @@ export const ChatHeader = () => {
             <span className="text-sm text-default-500">
               Criado em: {new Date(selectedConversation.created_at).toLocaleDateString('pt-BR')}
             </span>
+            <Chip variant="flat" size="sm" className="text-xs text-default-500">
+              {formatTokenCount(totalTokens)}
+            </Chip>
           </div>
         </div>
         <Input

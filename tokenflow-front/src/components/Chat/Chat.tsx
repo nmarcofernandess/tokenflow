@@ -1,9 +1,10 @@
 'use client'
 
-import { Card } from '@nextui-org/react'
+import { Card, Chip } from '@nextui-org/react'
 import { ChatHeader } from '@/components/Chat/ChatHeader'
 import { MessageList } from '@/components/Chat/MessageList'
 import { Sidebar } from '@/components/Chat/Sidebar'
+import { estimateTokens, formatTokenCount } from '@/utils/tokenCounter';
 
 export const Chat = () => {
   return (
