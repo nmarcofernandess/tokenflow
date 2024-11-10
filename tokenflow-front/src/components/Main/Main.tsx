@@ -6,6 +6,12 @@ import { LoadingOverlay } from '@/components/Loading/LoadingOverlay'
 import { FilterControls } from '@/components/FilterControls/FilterControls'
 import { FileManagement } from '@/components/FileManagement/FileManagement'
 import { Chat } from '@/components/Chat/Chat'
+import dynamic from 'next/dynamic'
+
+const LoadingPlaceholder = dynamic(() => import('@/components/Loading/LoadingPlaceholder'), {
+  loading: () => <LoadingOverlay />,
+  ssr: false
+})
 
 export const Main = () => {
   const [isImportOpen, setIsImportOpen] = useState(false)

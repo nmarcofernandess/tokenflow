@@ -41,7 +41,7 @@ interface FileState {
   setLoadingMessage: (message: string) => void;
   setDateFilter: (filter: DateFilter) => void;
   addTagFilter: (filter: TagFilter) => void;
-  removeTagFilter: (index: number) => void;
+  removeTagFilter: (index: number, operator: 'AND' | 'OR') => void;
   setSelectedConversation: (id: string) => void;
   favorites: Set<string>;
   searchInChat: string;
@@ -65,6 +65,21 @@ interface FileState {
     metadata: FileMetadata;
     ids: string[];
   } | undefined;
+  filteredConversationsCache: {
+    key: string;
+    result: UnifiedConversation[];
+  };
+  search: string;
+  highlightedMessageId: string | null;
+  setSearch: (search: string) => void;
+  setHighlightedMessageId: (id: string | null) => void;
+  sortConfig: {
+    field: 'date' | 'messages';
+    direction: 'asc' | 'desc';
+  };
+  setSortConfig: (config: FileState['sortConfig']) => void;
+  viewMode: 'all' | 'favorites';
+  setViewMode: (mode: 'all' | 'favorites') => void;
 }
 
 export const useStore = create<FileState>((set, get) => ({
@@ -85,6 +100,29 @@ export const useStore = create<FileState>((set, get) => ({
   searchInChat: '',
   fileStats: {},
   fileNameMapping: {},
+  filteredConversationsCache: {
+    key: '',
+    result: []
+  },
+  search: '',
+  highlightedMessageId: null,
+  sortConfig: {
+    field: 'date',
+    direction: 'desc'
+  },
+  viewMode: 'all',
+  setViewMode: (mode) => {
+    console.log('Alterando viewMode para:', mode)
+    set((state) => {
+      return {
+        viewMode: mode,
+        filteredConversationsCache: {
+          key: '',
+          result: []
+        }
+      }
+    })
+  },
   addFiles: (newFiles) => set((state) => {
     return { 
       files: [...state.files, ...newFiles]
@@ -172,12 +210,22 @@ export const useStore = create<FileState>((set, get) => ({
       tagFilters: [...state.filters.tagFilters, tagFilter]
     }
   })),
-  removeTagFilter: (index) => set((state) => ({
-    filters: {
-      ...state.filters,
-      tagFilters: state.filters.tagFilters.filter((_, i) => i !== index)
+  removeTagFilter: (index: number, operator: 'AND' | 'OR') => set((state) => {
+    // Filtra primeiro as tags do operador específico
+    const operatorTags = state.filters.tagFilters.filter(f => f.operator === operator)
+    const tagToRemove = operatorTags[index]
+    
+    if (!tagToRemove) return state
+
+    return {
+      filters: {
+        ...state.filters,
+        tagFilters: state.filters.tagFilters.filter(tag => 
+          !(tag.tag === tagToRemove.tag && tag.operator === operator)
+        )
+      }
     }
-  })),
+  }),
   setSelectedConversation: (id) => set({ selectedConversationId: id }),
   toggleFavorite: (id) => set((state) => {
     const newFavorites = new Set(state.favorites)
@@ -243,7 +291,72 @@ export const useStore = create<FileState>((set, get) => ({
   },
   getFilteredConversations: () => {
     const state = get();
-    return filterConversations(state.conversations, state.filters);
+    const cacheKey = JSON.stringify({
+      conversations: state.conversations.map(c => c.id),
+      filters: state.filters,
+      search: state.search,
+      sortConfig: state.sortConfig,
+      viewMode: state.viewMode,
+      favorites: Array.from(state.favorites)
+    });
+
+    if (state.filteredConversationsCache.key === cacheKey) {
+      return state.filteredConversationsCache.result;
+    }
+
+    let filtered = filterConversations(state.conversations, state.filters);
+
+    if (state.search.trim()) {
+      const searchTerm = state.search.toLowerCase().trim();
+      
+      // Log para debug
+      const invalidMessages = state.conversations
+        .flatMap(conv => conv.messages)
+        .filter(msg => !msg?.text);
+      
+      if (invalidMessages.length > 0) {
+        console.warn('Mensagens sem texto encontradas:', invalidMessages);
+      }
+
+      filtered = filtered.filter(conv => {
+        // Verifica se title existe antes de usar toLowerCase
+        const inTitle = conv.title?.toLowerCase?.()?.includes(searchTerm) || false;
+        
+        // Verifica se messages existe e se cada mensagem tem texto
+        const inMessages = conv.messages?.some(msg => 
+          msg?.text?.toLowerCase?.()?.includes(searchTerm)
+        ) || false;
+
+        return inTitle || inMessages;
+      });
+    }
+    
+    console.log('ViewMode atual:', state.viewMode)
+    if (state.viewMode === 'favorites') {
+      console.log('Filtrando favoritos...')
+      filtered = filtered.filter(conv => state.favorites.has(conv.id));
+    }
+    
+    filtered.sort((a, b) => {
+      if (state.sortConfig.field === 'date') {
+        const dateA = new Date(a.created_at).getTime();
+        const dateB = new Date(b.created_at).getTime();
+        return state.sortConfig.direction === 'asc' ? dateA - dateB : dateB - dateA;
+      } else {
+        const messagesA = a.messages.length;
+        const messagesB = b.messages.length;
+        return state.sortConfig.direction === 'asc' ? messagesA - messagesB : messagesB - messagesA;
+      }
+    });
+    
+    set(state => ({
+      filteredConversationsCache: {
+        key: cacheKey,
+        result: filtered
+      }
+    }));
+
+    return filtered;
   },
   getGlobalStats: () => {
     const state = get();
@@ -265,5 +378,8 @@ export const useStore = create<FileState>((set, get) => ({
       fileData: state.fileConversations[fileId]
     });
     return state.fileConversations[fileId];
-  }
+  },
+  setSearch: (search) => set({ search }),
+  setHighlightedMessageId: (id) => set({ highlightedMessageId: id }),
+  setSortConfig: (config) => set({ sortConfig: config }),
 })) 

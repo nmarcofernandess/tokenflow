@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from "@/components/store/useStore"
 import { Export } from "@/components/Export/Export"
 import { Button, Switch, Popover, PopoverTrigger, PopoverContent } from '@nextui-org/react'
-import { IconBrain, IconUpload, IconDownload, IconSun, IconMoon, IconChevronUp, IconChevronDown } from '@tabler/icons-react'
+import { IconBrain, IconUpload, IconDownload, IconSun, IconMoon } from '@tabler/icons-react'
 
 interface HeaderProps {
   onImportClick: () => void;
@@ -12,13 +12,23 @@ interface HeaderProps {
 
 export const Header = ({ onImportClick }: HeaderProps) => {
   const { files } = useStore()
-  const [isDark, setIsDark] = useState(true)
+  const [isDark, setIsDark] = useState<boolean | null>(null)
   const [isExportOpen, setIsExportOpen] = useState(false)
 
+  useEffect(() => {
+    const darkMode = document.documentElement.classList.contains('dark')
+    setIsDark(darkMode)
+  }, [])
+
   const toggleTheme = () => {
+    if (isDark === null) return
     const newTheme = !isDark
     setIsDark(newTheme)
     document.documentElement.classList.toggle('dark', newTheme)
+  }
+
+  if (isDark === null) {
+    return null
   }
 
   return (

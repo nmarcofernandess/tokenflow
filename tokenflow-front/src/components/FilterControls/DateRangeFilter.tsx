@@ -1,6 +1,8 @@
 import { Slider, SliderValue } from "@nextui-org/react"
 import { useStore } from "@/components/store/useStore"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import debounce from 'lodash/debounce'
+import throttle from 'lodash/throttle'
 
 export const DateRangeFilter = () => {
   const { 
@@ -52,14 +54,31 @@ export const DateRangeFilter = () => {
     });
   };
 
+  // Throttle para atualização visual do slider
+  const handleVisualChange = useCallback(
+    throttle((newValue: [number, number]) => {
+      setValue(newValue);
+    }, 16), // ~60fps
+    []
+  );
+
+  // Debounce para atualização do filtro real
+  const handleFilterChange = useCallback(
+    debounce((newValue: [number, number]) => {
+      setDateFilter({
+        startDate: new Date(newValue[0]).toISOString(),
+        endDate: new Date(newValue[1]).toISOString()
+      });
+    }, 300),
+    [setDateFilter]
+  );
+
   const handleChange = (newValue: number | number[]) => {
     if (!Array.isArray(newValue)) return;
     
-    setValue([newValue[0], newValue[1]]);
-    setDateFilter({
-      startDate: new Date(newValue[0]).toISOString(),
-      endDate: new Date(newValue[1]).toISOString()
-    });
+    const typedValue: [number, number] = [newValue[0], newValue[1]];
+    handleVisualChange(typedValue);
+    handleFilterChange(typedValue);
   };
 
   if (!isClient) return null;

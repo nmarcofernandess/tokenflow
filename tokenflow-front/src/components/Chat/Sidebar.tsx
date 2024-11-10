@@ -1,24 +1,56 @@
 'use client'
 
-import { Card, Chip, Button } from '@nextui-org/react'
+import { Card, Chip } from '@nextui-org/react'
 import { useStore } from '@/components/store/useStore'
-import { filterConversations } from '@/components/utils/filterConversations'
-import { IconStar, IconStarFilled } from '@tabler/icons-react'
+import { IconStar } from '@tabler/icons-react'
+import { useState, useRef, useEffect } from 'react'
 
 export const Sidebar = () => {
-  const { conversations, filters, setSelectedConversation, selectedConversationId, favorites, toggleFavorite } = useStore()
+  const [page, setPage] = useState(1)
+  const itemsPerPage = 20
   
-  // Ordena todas as conversas por data
-  const sortedConversations = [...conversations].sort((a, b) => 
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  );
+  const { 
+    favorites, 
+    toggleFavorite, 
+    selectedConversationId, 
+    setSelectedConversation
+  } = useStore()
+  
+  // Usar diretamente o resultado filtrado e ordenado do store
+  const filteredConversations = useStore(state => state.getFilteredConversations())
 
-  const filteredConversations = filterConversations(sortedConversations, filters)
+  // Aplicar apenas paginação
+  const paginatedConversations = filteredConversations.slice(0, page * itemsPerPage)
+
+  // Usar IntersectionObserver para infinite scroll
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && paginatedConversations.length < filteredConversations.length) {
+          setPage(p => p + 1)
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (loadMoreRef.current) {
+      observer.observe(loadMoreRef.current)
+    }
+
+    return () => observer.disconnect()
+  }, [paginatedConversations.length, filteredConversations.length])
+
+  // Reset da paginação quando mudam os filtros
+  useEffect(() => {
+    setPage(1)
+  }, [filteredConversations])
 
   return (
     <Card className="h-[calc(100vh-200px)]">
       <div className="p-4 space-y-4 h-full overflow-y-auto">
-        {filteredConversations.map((conversation) => (
+        {paginatedConversations.map((conversation) => (
           <div
             key={conversation.id}
             className={`p-4 rounded-lg cursor-pointer transition-all hover:bg-default-100 ${
@@ -30,7 +62,7 @@ export const Sidebar = () => {
               <h3 className="font-medium">{conversation.title}</h3>
               <IconStar
                 size={18}
-                className={favorites.has(conversation.id) ? 'text-warning' : ''}
+                className={favorites.has(conversation.id) ? 'text-warning fill-warning' : ''}
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleFavorite(conversation.id)
@@ -55,6 +87,7 @@ export const Sidebar = () => {
             </div>
           </div>
         ))}
+        <div ref={loadMoreRef} className="h-4" />
       </div>
     </Card>
   )

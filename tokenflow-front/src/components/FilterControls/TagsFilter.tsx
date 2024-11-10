@@ -1,7 +1,8 @@
 import { Input, Button, Chip } from '@nextui-org/react'
 import { IconTag, IconPlus } from '@tabler/icons-react'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useStore } from '@/components/store/useStore'
+import { useVirtualizer, VirtualItem } from '@tanstack/react-virtual'
 
 interface TagsFilterProps {
   operator: 'AND' | 'OR'
@@ -15,12 +16,27 @@ export const TagsFilter = ({ operator, placeholder = "Adicionar tag..." }: TagsF
 
   const currentTags = filters.tagFilters.filter(filter => filter.operator === operator)
 
+  const parentRef = useRef<HTMLDivElement>(null)
+  
+  const virtualizer = useVirtualizer({
+    count: currentTags.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 32,
+    overscan: 5
+  })
+
   const handleAddTag = () => {
     if (input.trim()) {
-      addTagFilter({
-        tag: input.trim(),
-        operator
-      })
+      const tagExists = currentTags.some(
+        tag => tag.tag.toLowerCase() === input.trim().toLowerCase()
+      )
+
+      if (!tagExists) {
+        addTagFilter({
+          tag: input.trim(),
+          operator
+        })
+      }
       setInput('')
     }
   }
@@ -55,25 +71,46 @@ export const TagsFilter = ({ operator, placeholder = "Adicionar tag..." }: TagsF
         </Button>
       </div>
 
-      {/* Área de tags */}
+      {/* Área de tags virtualizada */}
       {currentTags.length > 0 && (
-        <div className="flex flex-wrap gap-2 p-2 min-h-12 rounded-lg bg-default-100">
-          {currentTags.map((filter, index) => (
-            <Chip
-              key={`${filter.tag}-${index}`}
-              onClose={() => removeTagFilter(index)}
-              variant="flat"
-              color="primary"
-              size="sm"
-              className="transition-all hover:scale-105"
-              classNames={{
-                base: "cursor-pointer",
-                content: "text-sm"
-              }}
-            >
-              {filter.tag}
-            </Chip>
-          ))}
+        <div 
+          ref={parentRef}
+          className="flex flex-wrap gap-2 p-2 min-h-12 max-h-32 overflow-auto rounded-lg bg-default-100"
+          style={{
+            height: `${Math.min(currentTags.length * 32, 128)}px`
+          }}
+        >
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow: VirtualItem) => (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                <Chip
+                  key={`${currentTags[virtualRow.index].tag}-${virtualRow.index}`}
+                  onClose={() => removeTagFilter(virtualRow.index, operator)}
+                  variant="flat"
+                  color="primary"
+                  size="sm"
+                >
+                  {currentTags[virtualRow.index].tag}
+                </Chip>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

@@ -2,37 +2,38 @@ import { Input, Button, Dropdown, DropdownTrigger, DropdownMenu, DropdownItem, C
 import { IconSearch, IconSortAscending, IconSortDescending, IconCalendar, IconMessages, IconStar, IconStarFilled, IconChevronDown, IconTags } from '@tabler/icons-react'
 import { useState } from 'react'
 import { useStore } from '@/components/store/useStore'
-import { filterConversations } from '@/components/utils/filterConversations'
 import { TagsFilter } from './TagsFilter'
 import { DateRangeFilter } from './DateRangeFilter'
 
-type SortDirection = 'asc' | 'desc'
-interface SortState {
-  date: SortDirection;
-  messages: SortDirection;
-}
-
 export const FilterControls = () => {
-  const { conversations, filters, favorites, toggleAllFavorites } = useStore()
-  const [viewMode, setViewMode] = useState<'all' | 'favorites'>('all')
-  const [sortState, setSortState] = useState<SortState>({
-    date: 'desc',
-    messages: 'desc'
-  })
-
-  const filteredConversations = filterConversations(conversations, filters)
-  const visibleConversations = viewMode === 'all' 
-    ? filteredConversations 
-    : filteredConversations.filter(conv => favorites.has(conv.id))
+  const { 
+    favorites, 
+    toggleAllFavorites,
+    search,
+    setSearch,
+    sortConfig,
+    setSortConfig,
+    viewMode,
+    setViewMode
+  } = useStore()
   
-  const allAreFavorited = visibleConversations.length > 0 && 
-    visibleConversations.every(conv => favorites.has(conv.id))
+  // Usar diretamente o resultado filtrado do store
+  const filteredConversations = useStore(state => state.getFilteredConversations())
+  
+  const allAreFavorited = filteredConversations.length > 0 && 
+    filteredConversations.every(conv => favorites.has(conv.id))
 
-  const toggleSort = (field: keyof SortState) => {
-    setSortState(prev => ({
-      ...prev,
-      [field]: prev[field] === 'desc' ? 'asc' : 'desc'
-    }))
+  const toggleSort = (field: 'date' | 'messages') => {
+    setSortConfig({
+      field,
+      direction: sortConfig.field === field && sortConfig.direction === 'desc' ? 'asc' : 'desc'
+    })
+  }
+
+  const handleViewModeChange = (keys: any) => {
+    const newMode = Array.from(keys)[0] as 'all' | 'favorites'
+    console.log('Mudando viewMode para:', newMode)
+    setViewMode(newMode)
   }
 
   return (
@@ -92,8 +93,10 @@ export const FilterControls = () => {
             </Button>
           </DropdownTrigger>
           <DropdownMenu
-            selectedKeys={[viewMode]}
-            onSelectionChange={(keys) => setViewMode(Array.from(keys)[0] as 'all' | 'favorites')}
+            aria-label="Modo de visualização"
+            selectionMode="single"
+            selectedKeys={new Set([viewMode])}
+            onSelectionChange={handleViewModeChange}
           >
             <DropdownItem key="all">Todos</DropdownItem>
             <DropdownItem key="favorites">Favoritos</DropdownItem>
@@ -102,8 +105,10 @@ export const FilterControls = () => {
 
         <Input
           type="text"
-          placeholder="Buscar em todos os campos..."
+          placeholder="Buscar em títulos e conteúdo das mensagens..."
           startContent={<IconSearch size={18} />}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
           size="md"
           className="flex-1"
         />
@@ -113,28 +118,45 @@ export const FilterControls = () => {
           size="md"
           color="primary"
           startContent={allAreFavorited ? <IconStarFilled size={18} /> : <IconStar size={18} />}
-          onClick={() => toggleAllFavorites(visibleConversations.map(c => c.id))}
+          onClick={() => toggleAllFavorites(filteredConversations.map(c => c.id))}
         >
-          {allAreFavorited ? 'Desfavoritar' : 'Favoritar'} Todos ({visibleConversations.length})
+          {allAreFavorited ? 'Desfavoritar' : 'Favoritar'} Todos ({filteredConversations.length})
         </Button>
 
         <Button
           variant="flat"
           size="md"
           startContent={<IconCalendar size={18} />}
-          endContent={sortState.date === 'desc' ? <IconSortDescending size={18} /> : <IconSortAscending size={18} />}
+          endContent={sortConfig.direction === 'desc' 
+            ? <IconSortDescending size={18} /> 
+            : <IconSortAscending size={18} />}
           onClick={() => toggleSort('date')}
+          className={`
+            transition-colors
+            ${sortConfig.field === 'date' 
+              ? 'bg-primary/10 hover:bg-primary/20' 
+              : 'hover:bg-default-100'}
+          `}
         >
-          Data
+          Data {sortConfig.direction === 'asc' ? '(Antigas)' : '(Recentes)'}
         </Button>
+
         <Button
           variant="flat"
           size="md"
           startContent={<IconMessages size={18} />}
-          endContent={sortState.messages === 'desc' ? <IconSortDescending size={18} /> : <IconSortAscending size={18} />}
+          endContent={sortConfig.direction === 'desc' 
+            ? <IconSortDescending size={18} /> 
+            : <IconSortAscending size={18} />}
           onClick={() => toggleSort('messages')}
+          className={`
+            transition-colors
+            ${sortConfig.field === 'messages' 
+              ? 'bg-primary/10 hover:bg-primary/20' 
+              : 'hover:bg-default-100'}
+          `}
         >
-          Mensagens
+          Mensagens {sortConfig.direction === 'asc' ? '(Menos)' : '(Mais)'}
         </Button>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { Card, Chip } from '@nextui-org/react'
 import { IconBrain, IconRobot } from '@tabler/icons-react'
 import { useStore } from '@/components/store/useStore'
 import { detectAndConvertConversation } from '@/components/utils/conversationConverter'
+import { UnifiedConversation } from '@/components/types/chat'
 
 const CHUNK_SIZE = 1024 * 1024 * 10 // 10MB
 
@@ -20,7 +21,16 @@ export const FileManagement = () => {
     setLoadingMessage
   } = useStore()
 
-  const processFileInChunks = async (file: File) => {
+  const processChunk = (chunk: string): UnifiedConversation[] => {
+    try {
+      const data = JSON.parse(chunk)
+      return Array.isArray(data) ? data : [data]
+    } catch {
+      return []
+    }
+  }
+
+  const processFileInChunks = async (file: File): Promise<string> => {
     const fileReader = new FileReader()
     let offset = 0
     let result = ''
@@ -46,6 +56,8 @@ export const FileManagement = () => {
       offset += CHUNK_SIZE
     }
 
+    // Remover o processamento em chunks do JSON aqui
+    // Retornar apenas a string do arquivo
     return result
   }
 
