@@ -33,7 +33,9 @@ export interface ClaudeConversation {
   name: string;
   created_at: string;
   updated_at: string;
-  account: Account;
+  account: {
+    uuid: string;
+  };
   chat_messages: ClaudeMessage[];
 }
 
@@ -51,24 +53,21 @@ export interface GPTMessageAuthor {
 export interface GPTMessage {
   id: string;
   author: GPTMessageAuthor;
-  create_time: number | null;
-  update_time: number | null;
-  content: GPTMessageContent;
-  status: string;
-  end_turn: boolean | null;
-  weight: number;
-  metadata: {
-    is_user_system_message?: boolean;
-    is_visually_hidden_from_conversation?: boolean;
-    message_type?: string | null;
-    model_slug?: string;
-    parent_id?: string;
-    timestamp_?: string;
-    finished_text?: string;
-    initial_text?: string;
+  create_time: number;
+  update_time?: number;
+  content: {
+    parts: string[];
   };
-  recipient: string;
-  channel: string | null;
+  metadata?: {
+    is_visually_hidden_from_conversation?: boolean;
+  };
+}
+
+export interface GPTNode {
+  id: string;
+  message?: GPTMessage;
+  parent: string | null;
+  children: string[];
 }
 
 export interface GPTConversation {
@@ -76,22 +75,20 @@ export interface GPTConversation {
   create_time: number;
   update_time: number;
   mapping: {
-    [key: string]: {
-      id: string;
-      message?: GPTMessage;
-      parent: string | null;
-      children: string[];
-    };
+    [key: string]: GPTNode;
   };
-  current_node?: string;
 }
 
 export interface UnifiedMessage {
   id: string;
   text: string;
   sender: "human" | "assistant";
-  timestamp: string;
+  created_at: string;
+  updated_at: string;
   attachments?: ClaudeAttachment[];
+  files?: Array<{
+    file_name: string;
+  }>;
 }
 
 export interface UnifiedConversation {
@@ -99,6 +96,6 @@ export interface UnifiedConversation {
   title: string;
   created_at: string;
   updated_at: string;
+  source: 'gpt' | 'claude';
   messages: UnifiedMessage[];
-  source: "claude" | "gpt";
 } 

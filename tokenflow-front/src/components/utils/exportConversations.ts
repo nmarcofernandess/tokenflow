@@ -1,4 +1,4 @@
-import { Conversation } from '@/types'
+import { UnifiedConversation } from '@/components/types/chat'
 
 interface ExportConfig {
   baseFileName: string
@@ -11,7 +11,7 @@ interface ExportConfig {
 }
 
 export const exportConversations = (
-  conversations: Conversation[],
+  conversations: UnifiedConversation[],
   config: ExportConfig
 ) => {
   const {
@@ -25,7 +25,7 @@ export const exportConversations = (
   } = config
 
   // Função para preparar os dados de uma conversa
-  const prepareConversationData = (conversation: Conversation) => {
+  const prepareConversationData = (conversation: UnifiedConversation) => {
     if (!includeMetadata) {
       return {
         messages: conversation.messages
@@ -35,20 +35,33 @@ export const exportConversations = (
   }
 
   // Divide as conversas em grupos
-  const conversationGroups = separateBySource
-    ? Object.groupBy(conversations, conv => conv.source)
-    : { all: conversations }
+  const conversationGroups: Record<string, UnifiedConversation[]> = {}
+  
+  if (separateBySource) {
+    conversations.forEach(conv => {
+      const source = conv.source || 'unknown'
+      if (!conversationGroups[source]) {
+        conversationGroups[source] = []
+      }
+      conversationGroups[source].push(conv)
+    })
+  } else {
+    conversationGroups['all'] = conversations
+  }
 
   const exportedFiles: string[] = []
 
   // Processa cada grupo
-  Object.entries(conversationGroups).forEach(([source, groupConversations]) => {
+  Object.entries(conversationGroups).forEach(([source, groupConvs]) => {
+    if (!groupConvs || groupConvs.length === 0) return
+
     // Divide em chunks do tamanho especificado
-    const chunks = Array.from({ length: Math.ceil(groupConversations.length / maxConversationsPerFile) })
-      .map((_, index) => groupConversations.slice(
-        index * maxConversationsPerFile,
-        (index + 1) * maxConversationsPerFile
-      ))
+    const chunks = Array.from({ 
+      length: Math.ceil(groupConvs.length / maxConversationsPerFile) 
+    }).map((_, index) => groupConvs.slice(
+      index * maxConversationsPerFile,
+      (index + 1) * maxConversationsPerFile
+    ))
 
     // Processa cada chunk
     chunks.forEach((chunk, index) => {

@@ -3,259 +3,288 @@ import {
   GPTConversation, 
   UnifiedConversation,
   UnifiedMessage,
-  GPTMessage 
+  ClaudeMessage,
+  ClaudeAttachment,
+  GPTMessage,
+  GPTNode
 } from '@/components/types/chat'
 
-// Função de validação para mensagens unificadas
-const validateMessage = (message: UnifiedMessage): boolean => {
-  const isValid = !!(
-    message.id &&
-    message.text &&
-    message.sender &&
-    message.timestamp &&
-    ['human', 'assistant'].includes(message.sender)
-  )
-
-  if (!isValid) {
-    console.warn('Debug - Mensagem inválida:', message)
-  }
-
-  return isValid
+// Adicionar export na interface
+export interface ConversionResult {
+  conversations: UnifiedConversation[];
+  metadata: {
+    source: 'gpt' | 'claude';
+    totalChats: number;
+    dateRange: {
+      firstDate: string;
+      lastDate: string;
+    };
+  };
 }
 
-// Função de validação para conversas unificadas
-const validateConversation = (conversation: UnifiedConversation): boolean => {
-  const isValid = !!(
-    conversation.id &&
-    conversation.title &&
-    conversation.created_at &&
-    conversation.updated_at &&
-    Array.isArray(conversation.messages) &&
-    conversation.messages.every(validateMessage)
-  )
-
-  if (!isValid) {
-    console.warn('Debug - Conversa inválida:', {
-      id: conversation.id,
-      title: conversation.title,
-      messagesCount: conversation.messages.length
-    })
-  }
-
-  return isValid
-}
-
+// Função para converter conversas do Claude
 export const convertClaudeConversation = (
   conversation: ClaudeConversation
 ): UnifiedConversation => {
-  console.log('Debug - Convertendo conversa Claude:', {
-    uuid: conversation.uuid,
-    name: conversation.name,
-    messagesCount: conversation.chat_messages.length
-  })
+  try {
+    console.log('Debug - Convertendo conversa Claude:', {
+      uuid: conversation.uuid,
+      name: conversation.name,
+      messagesCount: conversation.chat_messages?.length,
+      rawData: conversation // Log completo para debug
+    });
 
-  const unifiedConversation = {
-    id: conversation.uuid,
-    title: conversation.name,
-    created_at: conversation.created_at,
-    updated_at: conversation.updated_at,
-    messages: conversation.chat_messages.map(msg => ({
-      id: msg.uuid,
-      text: msg.text,
-      sender: msg.sender,
-      timestamp: msg.created_at,
-      attachments: msg.attachments
-    })),
-    source: 'claude' as const
+    // Validações iniciais mais flexíveis
+    if (!conversation?.uuid) {
+      console.warn('Conversa Claude sem UUID:', conversation);
+      // Gera um UUID temporário se necessário
+      conversation.uuid = `claude_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    if (!Array.isArray(conversation?.chat_messages)) {
+      console.warn('Conversa Claude sem mensagens válidas:', conversation);
+      conversation.chat_messages = [];
+    }
+
+    const messages: UnifiedMessage[] = conversation.chat_messages
+      .map((msg: ClaudeMessage) => {
+        try {
+          if (!msg?.uuid) {
+            console.warn('Mensagem Claude sem UUID, gerando um:', msg);
+            msg.uuid = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+          }
+
+          if (!msg?.sender) {
+            console.warn('Mensagem Claude sem remetente, assumindo "human":', msg);
+            msg.sender = 'human';
+          }
+
+          const text = msg.text || msg.content?.[0]?.text || '';
+          const sender: 'human' | 'assistant' =
+            msg.sender === 'human' ? 'human' : 'assistant';
+
+          const processedMessage: UnifiedMessage = {
+            id: msg.uuid,
+            text,
+            sender,
+            created_at: msg.created_at || new Date().toISOString(),
+            updated_at: msg.updated_at || msg.created_at || new Date().toISOString()
+          };
+
+          if (msg.attachments && msg.attachments.length > 0) {
+            processedMessage.attachments = msg.attachments;
+          }
+
+          if (msg.files && msg.files.length > 0) {
+            processedMessage.files = msg.files;
+          }
+
+          return processedMessage;
+        } catch (error) {
+          console.error('Debug - Erro ao converter mensagem Claude:', error);
+          return null;
+        }
+      })
+      .filter((msg): msg is UnifiedMessage => msg !== null);
+
+    const unifiedConversation: UnifiedConversation = {
+      id: `claude_${conversation.uuid}`,
+      title: conversation.name || 'Sem título',
+      created_at: conversation.created_at || new Date().toISOString(),
+      updated_at: conversation.updated_at || conversation.created_at || new Date().toISOString(),
+      source: 'claude' as const,
+      messages
+    };
+
+    return unifiedConversation;
+  } catch (error) {
+    console.error('Debug - Erro ao converter conversa Claude:', error);
+    throw error;
   }
+};
 
-  if (!validateConversation(unifiedConversation)) {
-    throw new Error('Conversa Claude inválida')
-  }
-
-  return unifiedConversation
-}
-
+// Função para converter conversas do GPT
 export const convertGPTConversation = (
   conversation: GPTConversation
 ): UnifiedConversation => {
   try {
-    console.log('Debug - Iniciando conversão GPT:', {
+    console.log('Debug - Convertendo conversa GPT:', {
       title: conversation.title,
       createTime: conversation.create_time,
-      nodesCount: Object.keys(conversation.mapping).length,
-      mapping: conversation.mapping // Log completo do mapping para debug
-    })
+      nodesCount: Object.keys(conversation.mapping).length
+    });
 
-    const messages: UnifiedMessage[] = []
-    const nodes = conversation.mapping
-    
+    const messages: UnifiedMessage[] = [];
+    const nodes = conversation.mapping;
+
     // Encontra o nó raiz (que não tem parent)
-    const rootNodeId = Object.values(nodes)
-      .find(node => !node.parent)?.id
-
-    console.log('Debug - Nó raiz:', { rootNodeId })
+    const rootNodeId = Object.values(nodes).find(node => !node.parent)?.id;
 
     if (!rootNodeId) {
-      console.warn('Debug - Nó raiz não encontrado')
-      return {
-        id: `gpt_${conversation.create_time}_${conversation.title.replace(/\s+/g, '_')}`,
-        title: conversation.title || 'Conversa sem título',
-        created_at: new Date(conversation.create_time * 1000).toISOString(),
-        updated_at: new Date(conversation.update_time * 1000).toISOString(),
-        messages: [],
-        source: 'gpt'
-      }
+      throw new Error('Nó raiz não encontrado na conversa GPT');
     }
 
     // Função para processar uma mensagem GPT
     const processMessage = (message: GPTMessage): UnifiedMessage | null => {
-      console.log('Debug - Processando mensagem:', {
-        id: message.id,
-        role: message.author.role,
-        content: message.content,
-        metadata: message.metadata
-      })
+      try {
+        if (!message.id || !message.author?.role) return null;
 
-      // Ignora mensagens de sistema ocultas
-      if (
-        message.author.role === 'system' && 
-        message.metadata?.is_visually_hidden_from_conversation
-      ) {
-        console.debug('Debug - Mensagem de sistema oculta ignorada:', message.id)
-        return null
+        if (
+          message.author.role === 'system' &&
+          message.metadata?.is_visually_hidden_from_conversation === true
+        ) {
+          return null;
+        }
+
+        const text = message.content?.parts?.[0];
+        if (!text) return null;
+
+        const sender: 'human' | 'assistant' =
+          message.author.role === 'user' ? 'human' : 'assistant';
+
+        return {
+          id: message.id,
+          text,
+          sender,
+          created_at: new Date(message.create_time * 1000).toISOString(),
+          updated_at: message.update_time
+            ? new Date(message.update_time * 1000).toISOString()
+            : new Date(message.create_time * 1000).toISOString()
+        };
+      } catch (error) {
+        console.error('Debug - Erro ao processar mensagem GPT:', error);
+        return null;
       }
+    };
 
-      // Verifica se tem conteúdo válido
-      if (!message.content?.parts?.length) {
-        console.debug('Debug - Mensagem sem conteúdo:', message.id)
-        return null
-      }
-
-      const text = message.content.parts[0]
-      if (!text || text.length === 0) {
-        console.debug('Debug - Mensagem com texto vazio:', message.id)
-        return null
-      }
-
-      // Determina o sender baseado no role
-      let sender: "human" | "assistant"
-      if (message.author.role === 'user') {
-        sender = 'human'
-      } else if (['assistant', 'tool', 'system'].includes(message.author.role)) {
-        sender = 'assistant'
-      } else {
-        console.warn('Debug - Role desconhecido:', message.author.role)
-        sender = 'assistant' // fallback para assistant
-      }
-
-      return {
-        id: message.id,
-        text,
-        sender,
-        timestamp: message.create_time 
-          ? new Date(message.create_time * 1000).toISOString()
-          : new Date(conversation.create_time * 1000).toISOString()
-      }
-    }
-
-    // Função para percorrer a árvore de mensagens em ordem
-    const traverseMessages = (nodeId: string, depth = 0) => {
-      const node = nodes[nodeId]
-      if (!node) {
-        console.warn('Debug - Nó não encontrado:', nodeId)
-        return
-      }
-
-      console.debug('Debug - Processando nó:', {
-        id: nodeId,
-        depth,
-        hasMessage: !!node.message,
-        childrenCount: node.children?.length,
-        parentId: node.parent
-      })
+    // Função para percorrer a árvore de mensagens
+    const traverseMessages = (nodeId: string) => {
+      const node = nodes[nodeId];
+      if (!node) return;
 
       if (node.message) {
-        const processedMessage = processMessage(node.message)
+        const processedMessage = processMessage(node.message);
         if (processedMessage) {
-          messages.push(processedMessage)
+          messages.push(processedMessage);
         }
       }
 
-      // Percorre os filhos em ordem
       node.children?.forEach(childId => {
-        traverseMessages(childId, depth + 1)
-      })
+        traverseMessages(childId);
+      });
+    };
+
+    traverseMessages(rootNodeId);
+
+    if (messages.length === 0) {
+      throw new Error('Nenhuma mensagem válida na conversa GPT');
     }
 
-    // Inicia a travessia a partir do nó raiz
-    traverseMessages(rootNodeId)
-
-    console.log('Debug - Mensagens processadas:', {
-      total: messages.length,
-      messages: messages.map(m => ({
-        id: m.id,
-        sender: m.sender,
-        textLength: m.text.length
-      }))
-    })
-
-    // Gera um ID único para a conversa
-    const uniqueId = `gpt_${conversation.create_time}_${conversation.title.replace(/\s+/g, '_')}`
-
-    const unifiedConversation = {
-      id: uniqueId,
-      title: conversation.title || 'Conversa sem título',
+    const unifiedConversation: UnifiedConversation = {
+      id: `gpt_${conversation.create_time}`,
+      title: conversation.title || 'Sem título',
       created_at: new Date(conversation.create_time * 1000).toISOString(),
       updated_at: new Date(conversation.update_time * 1000).toISOString(),
-      messages,
-      source: 'gpt' as const
-    }
+      source: 'gpt',
+      messages
+    };
 
-    // Validação mais flexível
-    if (!unifiedConversation.id || !unifiedConversation.created_at || !Array.isArray(unifiedConversation.messages)) {
-      console.error('Debug - Validação falhou:', unifiedConversation)
-      throw new Error('Estrutura básica da conversa GPT inválida')
-    }
-
-    // Garante que todas as mensagens têm os campos necessários
-    const invalidMessages = unifiedConversation.messages.filter(
-      msg => !msg.id || !msg.text || !msg.sender || !msg.timestamp
-    )
-
-    if (invalidMessages.length > 0) {
-      console.error('Debug - Mensagens inválidas:', invalidMessages)
-      throw new Error(`${invalidMessages.length} mensagens com estrutura inválida`)
-    }
-
-    return unifiedConversation
+    return unifiedConversation;
   } catch (error) {
-    console.error('Debug - Erro na conversão GPT:', error)
-    throw error
+    console.error('Debug - Erro ao converter conversa GPT:', error);
+    throw error;
   }
-}
+};
 
+// Função principal de detecção e conversão
 export const detectAndConvertConversation = (
-  jsonData: any
-): UnifiedConversation => {
+  jsonData: any,
+  fileName: string
+): ConversionResult => {
   try {
-    console.log('Debug - Detectando formato:', {
-      hasMapping: !!jsonData.mapping,
-      hasCreateTime: !!jsonData.create_time,
-      hasUuid: !!jsonData.uuid,
-      hasChatMessages: !!jsonData.chat_messages
-    })
+    let conversations: UnifiedConversation[] = [];
+    let source: 'gpt' | 'claude' = 'gpt';
+    let dates: Date[] = [];
 
-    // Detecta o formato baseado na estrutura do JSON
-    if (jsonData.mapping && jsonData.create_time) {
-      return convertGPTConversation(jsonData as GPTConversation)
-    } else if (jsonData.uuid && jsonData.chat_messages) {
-      return convertClaudeConversation(jsonData as ClaudeConversation)
+    // Processa array ou objeto único
+    if (Array.isArray(jsonData)) {
+      conversations = jsonData.map(item => {
+        if (isClaudeFormat(item)) {
+          source = 'claude';
+          return convertClaudeConversation(item);
+        } else if (isGPTFormat(item)) {
+          source = 'gpt';
+          return convertGPTConversation(item);
+        }
+        throw new Error('Formato não reconhecido');
+      });
+    } else {
+      if (isClaudeFormat(jsonData)) {
+        source = 'claude';
+        conversations = [convertClaudeConversation(jsonData)];
+      } else if (isGPTFormat(jsonData)) {
+        source = 'gpt';
+        conversations = [convertGPTConversation(jsonData)];
+      }
     }
-    
-    throw new Error('Formato de conversa não reconhecido')
+
+    // Coleta todas as datas
+    conversations.forEach(conv => {
+      dates.push(new Date(conv.created_at));
+      dates.push(new Date(conv.updated_at));
+    });
+
+    // Ordena as datas
+    dates.sort((a, b) => a.getTime() - b.getTime());
+
+    const result = {
+      conversations,
+      metadata: {
+        source,
+        totalChats: conversations.length,
+        dateRange: {
+          firstDate: dates[0].toISOString(),
+          lastDate: dates[dates.length - 1].toISOString()
+        }
+      }
+    };
+
+    console.log('Debug - Conversão concluída:', {
+      fileName,
+      totalChats: result.metadata.totalChats,
+      source: result.metadata.source,
+      dateRange: result.metadata.dateRange
+    });
+
+    return result;
   } catch (error) {
-    console.error('Debug - Erro na conversão:', error)
-    throw error
+    console.error('Erro na conversão:', error);
+    throw error;
   }
-} 
+};
+
+// Funções auxiliares para identificar o formato
+const isGPTFormat = (data: any): boolean => {
+  return (
+    data &&
+    typeof data === 'object' &&
+    'mapping' in data &&
+    'create_time' in data
+  );
+};
+
+const isClaudeFormat = (data: any): boolean => {
+  const isValid = data && 
+    typeof data === 'object' &&
+    'uuid' in data &&
+    'chat_messages' in data;
+  
+  console.log('Verificando formato Claude:', {
+    data,
+    isValid,
+    hasUuid: 'uuid' in data,
+    hasMessages: 'chat_messages' in data
+  });
+  
+  return isValid;
+}; 

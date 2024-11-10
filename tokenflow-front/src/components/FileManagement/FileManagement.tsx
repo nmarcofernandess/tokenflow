@@ -7,14 +7,69 @@ import { IconBrain, IconRobot } from '@tabler/icons-react'
 import { useStore } from '@/components/store/useStore'
 import { detectAndConvertConversation } from '@/components/utils/conversationConverter'
 import type { UnifiedConversation } from '@/components/types/chat'
+import type { ConversionResult } from '@/components/utils/conversationConverter'
 
 const CHUNK_SIZE = 1024 * 1024 * 10 // 10MB
 
-interface FileManagementProps {
-  onClose?: () => void
-}
+// Novo componente para o card de log
+const StatsCard = () => {
+  const { fileConversations, getGlobalDateRange } = useStore();
+  const globalDateRange = getGlobalDateRange();
 
-export const FileManagement = ({ onClose }: FileManagementProps) => {
+  // Usa funções do store para cálculos globais
+  const globalStats = {
+    totalChats: Object.values(fileConversations).reduce(
+      (sum, data) => sum + data.metadata.totalChats, 
+      0
+    ),
+    sources: new Set(
+      Object.values(fileConversations).map(data => data.metadata.source)
+    ),
+    dateRange: globalDateRange
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
+  };
+
+  return (
+    <Card className="p-4 mt-4">
+      <h3 className="text-lg font-semibold mb-4">Estatísticas dos Arquivos</h3>
+      
+      {/* Stats por arquivo */}
+      <div className="space-y-4">
+        {Object.entries(fileConversations).map(([fileName, data]) => (
+          <div key={fileName} className="border-b pb-2">
+            <h4 className="font-medium">{fileName}</h4>
+            <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+              <div>IA: {data.metadata.source.toUpperCase()}</div>
+              <div>Total de Chats: {data.metadata.totalChats}</div>
+              <div>Data mais antiga: {formatDate(new Date(data.metadata.dateRange.firstDate))}</div>
+              <div>Data mais recente: {formatDate(new Date(data.metadata.dateRange.lastDate))}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stats globais */}
+      <div className="mt-4 pt-4 border-t">
+        <h4 className="font-medium mb-2">Estatísticas Globais</h4>
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div>Total de Chats: {globalStats.totalChats}</div>
+          <div>IAs: {Array.from(globalStats.sources).map(s => s.toUpperCase()).join(', ')}</div>
+          <div>Data mais antiga: {formatDate(globalStats.dateRange.min)}</div>
+          <div>Data mais recente: {formatDate(globalStats.dateRange.max)}</div>
+        </div>
+      </div>
+    </Card>
+  );
+};
+
+export const FileManagement = () => {
   const { 
     files, 
     addFiles, 
@@ -22,20 +77,9 @@ export const FileManagement = ({ onClose }: FileManagementProps) => {
     setConversations,
     fileConversations,
     setLoading,
-    setLoadingMessage 
+    setLoadingMessage,
+    fileStats
   } = useStore()
-
-  // Conta quantas conversas cada arquivo tem
-  const getConversationCount = (fileName: string) => {
-    return fileConversations[fileName]?.conversations.length || 0
-  }
-
-  // Identifica quais IAs estão presentes no arquivo
-  const getAITypes = (fileName: string) => {
-    const conversations = fileConversations[fileName]?.conversations || []
-    const types = new Set(conversations.map((conv: UnifiedConversation) => conv.source))
-    return Array.from(types)
-  }
 
   const processFileInChunks = async (file: File) => {
     const fileReader = new FileReader()
@@ -66,51 +110,53 @@ export const FileManagement = ({ onClose }: FileManagementProps) => {
     return result
   }
 
+  const processFile = async (file: File) => {
+    try {
+      setLoading(true);
+      setLoadingMessage(`Processando arquivo ${file.name}...`);
+
+      const content = await processFileInChunks(file);
+      const jsonData = JSON.parse(content);
+
+      const result = detectAndConvertConversation(jsonData, file.name);
+      
+      setConversations(result, file.name);
+
+      console.log('Debug - Arquivo processado:', {
+        fileName: file.name,
+        conversationsCount: result.conversations.length,
+        source: result.metadata.source
+      });
+
+    } catch (error) {
+      console.error('Erro ao processar arquivo:', error);
+      alert(`Erro ao processar o arquivo ${file.name}: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setLoading(false);
+      setLoadingMessage('');
+    }
+  };
+
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
-    setLoading(true)
-    addFiles(acceptedFiles)
+    setLoading(true);
+    addFiles(acceptedFiles);
 
     try {
       for (const file of acceptedFiles) {
-        setLoadingMessage(`Iniciando processamento do arquivo: ${file.name}`)
-        
-        const text = file.size > CHUNK_SIZE 
-          ? await processFileInChunks(file)
-          : await file.text()
-
-        setLoadingMessage(`Convertendo arquivo: ${file.name}`)
-        const jsonData = JSON.parse(text)
-        
-        let conversations = []
-        if (Array.isArray(jsonData)) {
-          setLoadingMessage(`Processando ${jsonData.length} conversas de ${file.name}`)
-          conversations = await Promise.all(
-            jsonData.map(async (conv, index) => {
-              setLoadingMessage(
-                `Processando conversa ${index + 1} de ${jsonData.length} do arquivo ${file.name}`
-              )
-              return detectAndConvertConversation(conv)
-            })
-          )
-        } else {
-          setLoadingMessage(`Processando conversa única do arquivo ${file.name}`)
-          conversations = [detectAndConvertConversation(jsonData)]
-        }
-
-        setConversations(conversations, file.name)
+        setLoadingMessage(`Processando arquivo: ${file.name}`);
+        await processFile(file);
       }
 
-      setLoadingMessage('Finalizando processamento...')
-      await new Promise(resolve => setTimeout(resolve, 500))
-      onClose?.()
+      setLoadingMessage('Finalizando processamento...');
+      await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
-      console.error('Erro ao processar arquivos:', error)
-      alert('Erro ao processar um ou mais arquivos. Verifique o formato.')
+      console.error('Erro ao processar arquivos:', error);
+      alert('Erro ao processar um ou mais arquivos. Verifique o formato.');
     } finally {
-      setLoading(false)
-      setLoadingMessage('')
+      setLoading(false);
+      setLoadingMessage('');
     }
-  }, [addFiles, setConversations, setLoading, setLoadingMessage, onClose])
+  }, [addFiles, setLoading, setLoadingMessage]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -150,43 +196,54 @@ export const FileManagement = ({ onClose }: FileManagementProps) => {
           </div>
           
           <div className="space-y-2">
-            {files.map((file, index) => (
-              <div key={index} className="p-4 rounded-xl bg-default-100">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{file.name}</span>
-                    <span className="text-xs text-default-500">
-                      ({(file.size / (1024 * 1024)).toFixed(2)} MB)
-                    </span>
-                  </div>
-                  <button 
-                    onClick={() => removeFile(index)}
-                    className="text-danger text-sm"
-                  >
-                    Remover
-                  </button>
-                </div>
-                <div className="flex items-center gap-2 mt-2">
-                  {getAITypes(file.name).map((type, i) => (
-                    <Chip
-                      key={i}
-                      size="sm"
-                      variant="flat"
-                      color={type === 'gpt' ? 'primary' : 'warning'}
-                      startContent={type === 'gpt' ? <IconBrain size={14} /> : <IconRobot size={14} />}
+            {files.map((file, index) => {
+              // Encontra os dados do arquivo no fileConversations
+              const fileData = Object.entries(fileConversations).find(([key, data]) => 
+                // Compara o tamanho do arquivo também para garantir que é o mesmo
+                key.includes(file.name) && data.metadata.totalChats > 0
+              );
+              
+              return (
+                <div key={index} className="p-4 rounded-xl bg-default-100">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{file.name}</span>
+                      <span className="text-xs text-default-500">
+                        ({(file.size / (1024 * 1024)).toFixed(2)} MB)
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => removeFile(index)}
+                      className="text-danger text-sm"
                     >
-                      {type === 'gpt' ? 'GPT' : 'Claude'}
-                    </Chip>
-                  ))}
-                  <Chip size="sm" variant="flat">
-                    {getConversationCount(file.name)} conversas
-                  </Chip>
+                      Remover
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    {fileData && (
+                      <>
+                        <Chip
+                          size="sm"
+                          variant="flat"
+                          color={fileData[1].metadata.source === 'gpt' ? 'primary' : 'warning'}
+                        >
+                          {fileData[1].metadata.source.toUpperCase()}
+                        </Chip>
+                        <Chip size="sm" variant="flat">
+                          {fileData[1].metadata.totalChats} conversas
+                        </Chip>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
+
+      {/* Novo Card de Stats */}
+      {files.length > 0 && <StatsCard />}
     </div>
   )
 } 

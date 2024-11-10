@@ -7,47 +7,44 @@ import { IconStar, IconStarFilled } from '@tabler/icons-react'
 
 export const Sidebar = () => {
   const { conversations, filters, setSelectedConversation, selectedConversationId, favorites, toggleFavorite } = useStore()
-  const filteredConversations = filterConversations(conversations, filters)
+  
+  // Ordena todas as conversas por data
+  const sortedConversations = [...conversations].sort((a, b) => 
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  );
+
+  const filteredConversations = filterConversations(sortedConversations, filters)
 
   return (
     <Card className="h-[calc(100vh-200px)]">
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {filteredConversations.map(conversation => (
+      <div className="p-4 space-y-4 h-full overflow-y-auto">
+        {filteredConversations.map((conversation) => (
           <div
             key={conversation.id}
+            className={`p-4 rounded-lg cursor-pointer transition-all hover:bg-default-100 ${
+              selectedConversationId === conversation.id ? 'bg-default-100' : ''
+            }`}
             onClick={() => setSelectedConversation(conversation.id)}
-            className={`
-              p-3 rounded-lg cursor-pointer transition-colors
-              ${selectedConversationId === conversation.id 
-                ? 'bg-primary/10 border-primary' 
-                : 'hover:bg-default-100 border-transparent'}
-              border
-            `}
           >
-            <div className="flex items-center justify-between gap-2">
-              <h3 className="font-medium text-lg truncate flex-1">
-                {conversation.title}
-              </h3>
-              <Button
-                isIconOnly
-                variant="light"
-                size="sm"
-                className="min-w-unit-8 flex-none"
+            <div className="flex items-center justify-between">
+              <h3 className="font-medium">{conversation.title}</h3>
+              <IconStar
+                size={18}
+                className={favorites.has(conversation.id) ? 'text-warning' : ''}
                 onClick={(e) => {
                   e.stopPropagation()
                   toggleFavorite(conversation.id)
                 }}
-              >
-                {favorites.has(conversation.id) 
-                  ? <IconStarFilled size={16} className="text-warning" />
-                  : <IconStar size={16} />
-                }
-              </Button>
+              />
             </div>
 
             <div className="flex items-center gap-2 mt-2">
-              <Chip size="sm" variant="flat" color="primary">
-                {conversation.source}
+              <Chip 
+                size="sm" 
+                variant="flat" 
+                color={conversation.source === 'claude' ? 'secondary' : 'primary'}
+              >
+                {conversation.source.toUpperCase()}
               </Chip>
               <Chip size="sm" variant="flat">
                 {conversation.messages.length} msgs
